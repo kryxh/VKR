@@ -20,6 +20,9 @@ __pycache__/
 venv/
 *.egg-info/
 
+catboost_info/
+
+
 postgres_data/
 
 .DS_Store
