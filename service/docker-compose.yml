@@ -1,0 +1,57 @@
+services:
+
+  
+  # PostgreSQL 15
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: advisory_db
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d advisory_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  
+  # FastAPI Backend
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/advisory_db
+      SNAPSHOT_DATE: ${SNAPSHOT_DATE:-2022-11-30}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ../propensity_model/outputs/predictions:/app/data/propensity:ro
+      - ../recommender/outputs/recommendations:/app/data/recommender:ro
+      - ../data:/app/data/raw:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  
+  # Streamlit Frontend
+  frontend:
+    build: ./frontend
+    environment:
+      API_URL: http://backend:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
