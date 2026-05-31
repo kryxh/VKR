@@ -11,4 +11,4 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "python db/loader.py && uvicorn main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "if [ \"$SKIP_LOADER\" != '1' ]; then python db/loader.py; fi && uvicorn main:app --host 0.0.0.0 --port 8000"]
