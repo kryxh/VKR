@@ -7,10 +7,14 @@ data/
 propensity_model/outputs/eda/
 propensity_model/outputs/evaluation/
 propensity_model/outputs/pipeline.log
-recommender/outputs/
+recommender/outputs/eda_recommender/
+recommender/outputs/evaluation/
+recommender/outputs/pipeline.log
 
 !propensity_model/outputs/predictions/
 !propensity_model/outputs/predictions/*.csv
+!recommender/outputs/recommendations/
+!recommender/outputs/recommendations/*.csv
 
 __pycache__/
 *.pyc
