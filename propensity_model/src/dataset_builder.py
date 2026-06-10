@@ -15,8 +15,6 @@ from config import (
     ID_COLS,
     SNAPSHOT_FREQ,
     TARGET_COL,
-    #TRAIN_END,
-    #VALID_END,
     DORMANCY_MULTIPLIER, 
     DORMANCY_MIN_DAYS,
 )
@@ -28,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 
 
-# Генерация временных срезов
 def generate_snapshot_dates(transactions: pd.DataFrame, freq: str = SNAPSHOT_FREQ, horizon_days: int = HORIZON_DAYS):
     min_date = transactions["timestamp"].min()
     max_date = transactions["timestamp"].max()
@@ -49,8 +46,6 @@ def generate_snapshot_dates(transactions: pd.DataFrame, freq: str = SNAPSHOT_FRE
     return dates
 
 
-
-# Определение активных клиентов
 def get_active_customers(tx_history, snapshot_date, active_window_days=ACTIVE_WINDOW_DAYS):
     cutoff = snapshot_date - pd.Timedelta(days=active_window_days)
     tx_recent = tx_history[tx_history["timestamp"] > cutoff]
@@ -66,7 +61,6 @@ def get_reactivation_candidates(tx_history, min_tx_react=MIN_TX_REACT):
 
 
 
-# Таргет
 def build_labels(transactions: pd.DataFrame, snapshot_date: pd.Timestamp, customer_ids: np.ndarray,
     horizon_days=HORIZON_DAYS, gap_days=PREDICTION_GAP_DAYS,
 ):
@@ -90,7 +84,6 @@ def build_labels(transactions: pd.DataFrame, snapshot_date: pd.Timestamp, custom
 
 
 
-# Создание временного среза для Timing
 def build_snapshot(snapshot_date: pd.Timestamp, transactions: pd.DataFrame, customers: pd.DataFrame, assets: pd.DataFrame, prices: pd.DataFrame):
     tx_history = transactions[transactions["timestamp"] <= snapshot_date].copy()
     
@@ -118,14 +111,14 @@ def build_snapshot(snapshot_date: pd.Timestamp, transactions: pd.DataFrame, cust
         return pd.DataFrame()
 
     profile_at_T = get_customer_profile_at(customers, snapshot_date)
-    profile_at_T = profile_at_T[profile_at_T["customerID"].isin(active_ids)] # оставляем только профили активных клиентов
+    profile_at_T = profile_at_T[profile_at_T["customerID"].isin(active_ids)]
     missing_profiles = set(active_ids) - set(profile_at_T["customerID"])
     if missing_profiles:
         logger.warning(
             f"  {len(missing_profiles):,} активных клиентов без профиля "
             f"на {snapshot_date.date()} — исключены"
         )
-    tx_history = tx_history[tx_history["customerID"].isin(active_ids)] #оставляем историю только по активным клиентам
+    tx_history = tx_history[tx_history["customerID"].isin(active_ids)]
 
     features = compute_all_features(
         tx_history=tx_history,
@@ -152,7 +145,6 @@ def build_snapshot(snapshot_date: pd.Timestamp, transactions: pd.DataFrame, cust
 
 
 
-# Сборка итогового датасета для Timing
 def build_dataset(transactions: pd.DataFrame, customers: pd.DataFrame, assets: pd.DataFrame, prices: pd.DataFrame, snapshot_dates: list[pd.Timestamp] | None = None):
     if snapshot_dates is None:
         snapshot_dates = generate_snapshot_dates(transactions)
@@ -209,14 +201,12 @@ def _compute_personal_thresholds(tx_history: pd.DataFrame,
     return thresholds
 
 
-# Создание временного среза для Reactivation
 def build_reactivation_snapshot(snapshot_date, transactions, customers, assets, prices,
     dormancy_threshold=DORMANCY_THRESHOLD_DAYS, reactivation_horizon=REACTIVATION_HORIZON_DAYS, min_tx=MIN_TX_REACT,
     active_window=ACTIVE_WINDOW_DAYS
 ):
     tx_history = transactions[transactions["timestamp"] <= snapshot_date].copy()
 
-    # Все клиенты активные за N месяцев
     all_recent = get_active_customers(
         tx_history,
         snapshot_date,
@@ -238,7 +228,6 @@ def build_reactivation_snapshot(snapshot_date, transactions, customers, assets, 
     )
     days_since = (snapshot_date - last_buy).dt.days
 
-    # Вычисляем персональные пороги для всех кандидатов
     all_candidates = (
         days_since.index
         .intersection(all_recent)
@@ -250,7 +239,6 @@ def build_reactivation_snapshot(snapshot_date, transactions, customers, assets, 
         min_days=DORMANCY_MIN_DAYS,
     )
 
-    # Клиент dormant если его пауза > его персонального порога
     days_since_candidates = days_since.reindex(all_candidates)
     dormant_mask = days_since_candidates > personal_thresholds
     dormant_ids  = days_since_candidates[dormant_mask].index
@@ -259,7 +247,6 @@ def build_reactivation_snapshot(snapshot_date, transactions, customers, assets, 
         logger.warning(f"Нет спящих клиентов для среза {snapshot_date.date()}")
         return pd.DataFrame()
 
-    # Сохраняем персональные пороги как признак для модели
     personal_thresh_feature = personal_thresholds[dormant_ids].rename("personal_dormancy_threshold")
 
     tx_dormant = tx_history[tx_history["customerID"].isin(dormant_ids)]
@@ -284,7 +271,6 @@ def build_reactivation_snapshot(snapshot_date, transactions, customers, assets, 
         mode="reactivation"
     )
 
-    # Добавляем взаимодействия — специфичны для reactivation
     market_ctx = compute_market_features(prices, snapshot_date)
     interaction_f = compute_interaction_features(features, market_ctx)
     features = features.join(interaction_f, how="left")
@@ -302,17 +288,14 @@ def build_reactivation_snapshot(snapshot_date, transactions, customers, assets, 
     )
     features["snapshot_date"] = snapshot_date
 
-    # Добавляем персональный порог как признаки
     features = features.join(personal_thresh_feature,  how="left")
     features["personal_dormancy_threshold"] = features["personal_dormancy_threshold"].fillna(DORMANCY_MIN_DAYS)
-    
     
     pos_rate = features[TARGET_COL].mean()
     return features.reset_index()
 
 
 
-# Сборка итогового датасета для Reactivation
 def build_reactivation_dataset(transactions, customers, assets, prices, snapshot_dates=None):
     if snapshot_dates is None:
         snapshot_dates = generate_snapshot_dates(transactions)
@@ -356,7 +339,6 @@ def compute_split_dates(transactions: pd.DataFrame) -> tuple[str, str]:
     max_date   = transactions["timestamp"].max()
     valid_end  = max_date - pd.DateOffset(months=TEST_MONTHS)
     train_end  = valid_end - pd.DateOffset(months=VALID_MONTHS)
-    # Нормализуем до начала месяца для воспроизводимости
     valid_end  = valid_end.replace(day=1)
     train_end  = train_end.replace(day=1)
     logger.info(
@@ -367,7 +349,6 @@ def compute_split_dates(transactions: pd.DataFrame) -> tuple[str, str]:
 
 
 
-# Train/validation/test split
 def time_split(dataset: pd.DataFrame, transactions: pd.DataFrame | None = None):
     """Разбивка на train/valid/test по snapshot_date.
 
@@ -400,7 +381,6 @@ def time_split(dataset: pd.DataFrame, transactions: pd.DataFrame | None = None):
 
 
 
-# X / y
 def get_X_y(df, model_type: str = "timing"):
     if model_type == "timing":
         feature_cols = TIMING_ALL_FEATURES
@@ -409,7 +389,6 @@ def get_X_y(df, model_type: str = "timing"):
     else:
         raise ValueError(f"Неизвестный model_type: {model_type}")
 
-    # Берём только колонки которые есть в датафрейме
     available = [c for c in feature_cols if c in df.columns]
     missing = set(feature_cols) - set(available)
     if missing:

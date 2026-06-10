@@ -4,9 +4,9 @@
 
 Recommender Model генерирует персонализированные рекомендации инвестиционных инструментов (топ-3 ISIN) для каждого клиента из списка `hot_customers`, сформированного Propensity Model. Рекомендации передаются финансовому советнику вместе с текстовым обоснованием для каждой позиции.
 
-**Ключевая задача:** не просто ранжировать инструменты, а предложить те, которые с наибольшей вероятностью соответствуют текущим предпочтениям клиента — с учётом его истории, поведения похожих клиентов и диверсификации портфеля.
+**Ключевая задача:** предложить те инструменты, которые с наибольшей вероятностью соответствуют текущим предпочтениям клиента — с учётом его истории, поведения похожих клиентов и диверсификации портфеля.
 
-**Данные:** датасет [FAR-Trans](https://github.com/sanzcruz/FAR-Trans) — транзакционная история ~28 000 клиентов, 279 уникальных ISIN (Stock, Bond, MTF).
+**Данные:** датасет [FAR-Trans](https://github.com/sanzcruz/FAR-Trans) — транзакционная история ~29 000 клиентов, 279 уникальных ISIN (Stock, Bond, MTF).
 
 ---
 
@@ -19,7 +19,7 @@ hot_customers_{DATE}.csv (от Propensity Model)
     │       └── EASE (основная модель)
     │               └── score(u, i) = (1/|H_u|) × Σ_{j∈H_u} W[j, i]
     │
-    ├── Для клиентов вне EASE item-space → ALS (fallback)
+    ├── Для клиентов вне EASE item-space ALS (fallback)
     │       └── score = α × s_item + (1-α) × s_user  [percentile rank]
     │
     └── Для клиентов без достаточной истории
@@ -49,7 +49,7 @@ score(u, i) = (1/|H_u|) × Σ_{j ∈ H_u} W[j, i]
 ```
 где `H_u` — история покупок клиента в пространстве item-space.
 
-**Размер матрицы W:** 158 × 158 (число ISIN с поддержкой ≥ 5 покупателей). Вычисляется аналитически за секунды.
+**Размер матрицы W:** 158 × 158 (число ISIN с поддержкой ≥ 5 покупателей).
 
 **Оптимальный λ:** подбирается grid search по 5 значениям на LOO-валидации. Финальное значение: `λ = 500`.
 
@@ -57,9 +57,9 @@ score(u, i) = (1/|H_u|) × Σ_{j ∈ H_u} W[j, i]
 
 ---
 
-## Fallback модель: ALS
+## Модель второго приоритета: ALS
 
-**ALS** (Alternating Least Squares, Hu et al. 2008) используется как fallback при недоступности EASE или отсутствии клиента в item-space матрицы:
+**ALS** (Alternating Least Squares, Hu et al. 2008) используется как заглушка при недоступности EASE или отсутствии клиента в item-space матрицы:
 
 - User-факторы `U` (N × k) и Item-факторы `V` (M × k), k = 20
 - **Item-based score:** `s_item(u, i) = (1/|H_u|) × Σ_{j∈H_u} (v_j · v_i)`
@@ -81,7 +81,7 @@ score(u, i) = (1/|H_u|) × Σ_{j ∈ H_u} W[j, i]
 | `INTERACTION_WINDOW_DAYS` | 365 | Плотность матрицы 1.759% vs 0.92% для всей истории; ablation: +54% NDCG |
 | `MIN_ITEM_SUPPORT` | 5 | Удаляет 20% ISIN, теряет только 0.2% транзакций; эмбеддинги редких ISIN ненадёжны |
 | `EXCLUDE_RECENT_DAYS` | 30 | 62.3% повторных покупок одного ISIN в ≤ 30 дней — без фильтра модель рекомендует уже купленное |
-| `MIN_TX_REC` | 3 | EDA: warm-клиенты с ≥ 3 уникальными ISIN = 77.1% → ALS является основным путём |
+| `MIN_TX_REC` | 3 | EDA: warm-клиенты с ≥ 3 уникальными ISIN = 77.1% ALS является основным путём |
 
 ### Confidence weighting с temporal decay
 
@@ -135,22 +135,22 @@ Grid search по `λ ∈ {50, 200, 500, 1000, 2000}` на тех же LOO-пар
 
 ```
 1. H_u = ISINs в [snapshot − 365d, snapshot) ∩ ALS item-space
-   if |unique(H_u)| ≥ 3 → ALS/EASE path
+   if |unique(H_u)| ≥ 3 ALS/EASE path
 
 2. Расширяем до 730d
-   if |unique(H_u)| ≥ 3 → ALS path (window_used="730d")
+   if |unique(H_u)| ≥ 3 ALS path (window_used="730d")
 
 3. Расширяем до полной истории (3650d)
-   if |unique(H_u)| ≥ 3 → ALS path (window_used="full")
+   if |unique(H_u)| ≥ 3 ALS path (window_used="full")
 
-4. → Fallback path (window_used="none")
+4. Fallback path (window_used="none")
 ```
 
 **Критически важно:** `H_u` фильтруется по ALS item-space — ISIN из более старой истории могут отсутствовать в 365d-матрице и вызвать KeyError без фильтрации.
 
 ---
 
-## Diversity корректировка
+## Корректировка диверсификации
 
 ### Portfolio boost (активируется при n_cat ≥ 2, охват 4.4% базы)
 
@@ -160,10 +160,10 @@ Grid search по `λ ∈ {50, 200, 500, 1000, 2000}` на тех же LOO-пар
 
 ```
 Stock (с данными о секторе):
-    → топ-1 ISIN из каждого из топ-3 секторов по popularity
+    топ-1 ISIN из каждого из топ-3 секторов по popularity
 
 MTF / Bond без данных о секторе:
-    → weighted random sampling с весом log(n_buyers)
+    weighted random sampling с весом log(n_buyers)
 ```
 
 ### Фильтр недавно купленных
@@ -245,7 +245,7 @@ python recommender/main.py --snapshot-date 2022-10-31 --train --with-baseline
 | *(нет флагов)* / `--predict-only` | Загружает `ease_model_{DATE}.npz`, строит imat, генерирует рекомендации |
 | `--train` | Строит interaction matrix, обучает EASE (grid search по λ), сохраняет модель |
 | `--train --with-baseline` | То же + обучает ALS с лучшими параметрами из config |
-| `--tune` | Полный ALS grid search (135 комб.) + EASE grid search, результаты → лог |
+| `--tune` | Полный ALS grid search (135 комб.) + EASE grid search, результаты лог |
 | `--eval-only` | Обучает ALS baseline + загружает EASE, сравнивает NDCG@3 |
 | `--snapshot-date` | Дата в формате `YYYY-MM-DD`. По умолчанию — последняя дата в транзакциях |
 | `--eval-stage` | `validation` (по умолчанию) или `test` |
@@ -307,7 +307,7 @@ recommender/
 ```
 implicit        # ALS
 numpy
-scipy           # sparse матрицы
+scipy
 pandas
 scikit-learn
 matplotlib
@@ -321,11 +321,11 @@ matplotlib
 
 ```
 propensity_model/main.py --predict-only --snapshot-date DATE
-    → propensity_model/outputs/predictions/hot_customers_DATE.csv
+    propensity_model/outputs/predictions/hot_customers_DATE.csv
 
 recommender/main.py --snapshot-date DATE --train
-    → читает hot_customers_DATE.csv
-    → recommender/outputs/recommendations/recommendations_DATE.csv
+    читает hot_customers_DATE.csv
+    recommender/outputs/recommendations/recommendations_DATE.csv
 ```
 
 Дата в именах файлов должна точно совпадать. EASE переобучается при каждом запуске; ALS (fallback) можно обучать реже.

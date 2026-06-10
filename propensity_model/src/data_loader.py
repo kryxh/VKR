@@ -8,14 +8,12 @@ from config import (DATA_FILES, RISK_LEVEL_CANONICAL, INVESTMENT_CAPACITY_CANONI
 logger = logging.getLogger(__name__)
 
 
-# Транзакции
 def load_transactions(path: Path | None = None):
     
     path = path or DATA_FILES["transactions"]
     logger.info(f"Загрузка транзакций из {path}")
     df = pd.read_csv(path, parse_dates=["timestamp"])
 
-    # Очистка
     n_raw = len(df)
     df = df.sort_values("timestamp")
     df = df.drop_duplicates(subset="transactionID", keep="last")
@@ -29,19 +27,16 @@ def load_transactions(path: Path | None = None):
     return df.reset_index(drop=True)
 
 
-# Клиенты
 def load_customers(path: Path | None = None):
 
     path = path or DATA_FILES["customers"]
     logger.info(f"Загрузка данных клиентов из {path}")
     df = pd.read_csv(path, parse_dates=["lastQuestionnaireDate", "timestamp"])
 
-    # Помечаем строки, где профильные поля были предсказаны алгоритмом
     is_predicted_risk = df["riskLevel"].str.startswith("Predicted_", na=False)
     is_predicted_capacity = df["investmentCapacity"].str.startswith("Predicted_", na=False)
     df["is_profile_predicted"] = (is_predicted_risk | is_predicted_capacity).astype(int)
 
-    # Маппинг по riskLevel и investmentCapacity (приведение типов)
     df["riskLevel"] = (df["riskLevel"].fillna("Not_Available").map(RISK_LEVEL_CANONICAL).fillna("Not_Available"))
     df["investmentCapacity"] = (df["investmentCapacity"].fillna("Not_Available").map(INVESTMENT_CAPACITY_CANONICAL).fillna("Not_Available"))
     df["is_capacity_missing"] = (df["investmentCapacity"] == "Not_Available").astype(int)
@@ -55,17 +50,16 @@ def load_customers(path: Path | None = None):
 
 def get_customer_profile_at(customers_df: pd.DataFrame, snapshot_date: pd.Timestamp):
     
-    past = customers_df[customers_df["timestamp"] <= snapshot_date].copy() # оставляем только записи, известные на момент T или раньше
+    past = customers_df[customers_df["timestamp"] <= snapshot_date].copy()
     if past.empty:
         logger.warning(f"Нет записей клиента на или до {snapshot_date}")
         return pd.DataFrame(columns=customers_df.columns)
-    past = past.sort_values("timestamp") # для каждого клиента берём последний доступный статус
+    past = past.sort_values("timestamp")
     profile = past.groupby("customerID", sort=False).last().reset_index()
 
     return profile
 
 
-# Активы
 def load_assets(path: Path | None = None):
 
     path = path or DATA_FILES["assets"]
@@ -80,7 +74,6 @@ def load_assets(path: Path | None = None):
     return df
 
 
-# Цены закрытия
 def load_close_prices(path: Path | None = None):
     
     path = path or DATA_FILES["prices"]
@@ -95,7 +88,6 @@ def load_close_prices(path: Path | None = None):
     return df
 
 
-# Рынки: инфо
 def load_markets(path: Path | None = None):
 
     path = path or DATA_FILES["markets"]
@@ -106,7 +98,6 @@ def load_markets(path: Path | None = None):
     return df
 
 
-# Загружаем всё сразу
 def load_all():
     return {
         "transactions": load_transactions(),

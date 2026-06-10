@@ -98,7 +98,7 @@ def build_interaction_matrix(
     )
 
     user_ids = sorted(pair_stats["customerID"].unique())
-    item_ids = list(item_meta.index)          # порядок из item_meta
+    item_ids = list(item_meta.index)
 
     user_id_to_idx = {uid: i for i, uid in enumerate(user_ids)}
     item_id_to_idx = {iid: i for i, iid in enumerate(item_ids)}

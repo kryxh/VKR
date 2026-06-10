@@ -36,7 +36,6 @@ PREDICT_DIR = OUTPUT_DIR / "predictions"
 PREDICT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# Загрузка модели
 def load_model(name: str):
     cbm_path = MODEL_DIR / f"{name}.cbm"
     pkl_path = MODEL_DIR / f"{name}.pkl"
@@ -57,7 +56,6 @@ def load_model(name: str):
             f"Сначала запустите main.py, чтобы обучить и сохранить модели"
         )
 
-# Загрузка калибратора
 def load_calibrator(name: str):
     path = MODEL_DIR / f"{name}.pkl"
     if not path.exists():
@@ -150,7 +148,6 @@ def score_customers_unified(
 
     market_ctx = compute_market_features(prices, snapshot_date)
 
-    # Warm: timing модель
     if len(warm_ids) > 0:
         tx_w      = tx_history[tx_history["customerID"].isin(warm_ids)]
         profile_w = get_customer_profile_at(customers, snapshot_date)
@@ -179,7 +176,6 @@ def score_customers_unified(
             ),
         }))
 
-    # Dormant: reactivation модель
     if len(dormant_ids) > 0:
         tx_d      = tx_history[tx_history["customerID"].isin(dormant_ids)]
         profile_d = get_customer_profile_at(customers, snapshot_date)
@@ -189,8 +185,6 @@ def score_customers_unified(
         interaction = compute_interaction_features(feat_d, market_ctx)
         feat_d      = feat_d.join(interaction, how="left")
 
-        # --- Признаки, которые при обучении добавлялись в build_reactivation_snapshot ---
-        # personal_dormancy_threshold
         personal_thresholds = _compute_personal_thresholds(
             tx_d, dormant_ids,
             multiplier=DORMANCY_MULTIPLIER,
@@ -242,7 +236,6 @@ def score_customers_unified(
 
 
 
-# Top-K
 def select_hot_customers(
     scored_df: pd.DataFrame,
     top_k_frac: float = 0.20,
@@ -259,7 +252,6 @@ def select_hot_customers(
         .reset_index(drop=True)
     )
 
-    # Обновлённое логирование под новые сегменты
     logger.info(
         f"Отобрано клиентов для контакта: {len(hot):,} "
         f"(top {top_k_frac:.0%} среди {n_total:,}, min_score={min_score})\n"
@@ -271,7 +263,6 @@ def select_hot_customers(
 
 
 
-# Стабильность скоринга: сравнение двух последовательных срезов
 def score_stability_report(scored_t0: pd.DataFrame, scored_t1: pd.DataFrame):
     t0 = scored_t0[["customerID", "propensity_score", "rank"]].rename(
         columns={"propensity_score": "score_t0", "rank": "rank_t0"}
@@ -292,7 +283,6 @@ def score_stability_report(scored_t0: pd.DataFrame, scored_t1: pd.DataFrame):
 
 
 
-# Запуск полного цикла инференса с сохранением результатов
 def run_inference(
     timing_model_name: str = "catboost_timing",
     reactivation_model_name: str = "catboost_reactivation",

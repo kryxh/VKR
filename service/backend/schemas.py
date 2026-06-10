@@ -16,18 +16,6 @@ JUSTIFICATION_MAP = {
     "popular_category":     "Популярно среди клиентов с похожими предпочтениями",
 }
 
-JUSTIFICATION_ICON = {
-    "risk_profile":         "✅",
-    "similar_clients":      "👥",
-    "portfolio_complement": "💡",
-    "popularity":           "🔥",
-    "item_cf":              "💡",
-    "user_cf":              "👥",
-    "portfolio":            "💡",
-    "popular_sector":       "🔥",
-    "popular_category":     "🔥",
-}
-
 
 # GET /api/clients — список клиентов
 class ClientListItem(BaseModel):

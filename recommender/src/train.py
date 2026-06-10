@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 
 
 
-# ALS обучение
 def train_als(
     imat: InteractionMatrix,
     factors: int,
@@ -42,11 +41,9 @@ def train_als(
         random_state   = random_state,
         use_gpu        = False,
     )
-    # implicit принимает (n_items, n_users)
     item_users = imat.matrix.T.tocsr()
     model.fit(item_users, show_progress=False)
 
-    # Гарантируем соответствие размеров
     model.user_factors = model.user_factors[:imat.n_users]
     model.item_factors = model.item_factors[:imat.n_items]
     return model
@@ -62,7 +59,6 @@ def train_als_best(imat: InteractionMatrix) -> AlternatingLeastSquares:
 
 
 
-# CF-скоры
 def _percentile_rank_normalize(scores: np.ndarray) -> np.ndarray:
     n = len(scores)
     if n == 0:
@@ -110,9 +106,6 @@ def compute_fusion_score(
         (1 - fusion_alpha) * _percentile_rank_normalize(s_user)
     )
 
-
-
-# LOO evaluation
 
 
 def _ndcg_at_k(predicted_ranked: list, relevant_item: str, k: int = TOP_K) -> float:
@@ -163,19 +156,15 @@ def evaluate_loo(
 
     for uid, hidden_isin in loo_pairs:
         u_idx = imat.user_id_to_idx.get(uid)
-        # Пропускаем если пользователь за пределами обученной модели
-        # (может произойти если implicit обрезал user_factors)
         if u_idx is None or u_idx >= n_users_in_model:
             continue
 
         scores = compute_fusion_score(u_idx, model, imat, fusion_alpha)
 
-        # Исключаем историю кроме hidden_isin
         for isin in set(imat.user_items(uid)) - {hidden_isin}:
             if isin in imat.item_id_to_idx:
                 scores[imat.item_id_to_idx[isin]] = -np.inf
 
-        # int() — np.argsort возвращает np.int64, dict ключи — int
         top_isins = [
             imat.idx_to_item_id[int(i)]
             for i in np.argsort(scores)[::-1]
@@ -189,8 +178,6 @@ def evaluate_loo(
     return float(np.mean(ndcg_scores))
 
 
-
-# Grid Search — Этап 1: ALS гиперпараметры
 def grid_search_als(
     imat: InteractionMatrix,
     tx_window: pd.DataFrame,
@@ -229,7 +216,6 @@ def grid_search_als(
         )
         try:
             model_local = train_als(imat_local, factors=k, regularization=lam)
-            # Строим loo_pairs от imat_local чтобы user_idx совпадали с моделью
             loo_local   = build_loo_pairs(imat_local, tx_val)
             ndcg        = evaluate_loo(loo_local, model_local, imat_local, neutral_alpha)
         except Exception as e:
@@ -323,7 +309,6 @@ def _run_sensitivity_check(
 
 
 
-# Grid Search — Этап 2: FUSION_ALPHA
 def grid_search_fusion(
     model: AlternatingLeastSquares,
     imat: InteractionMatrix,
@@ -351,7 +336,6 @@ def grid_search_fusion(
 
 
 
-# Сохранение / загрузка
 def save_als_model(
     model: AlternatingLeastSquares,
     imat: InteractionMatrix,
@@ -376,7 +360,6 @@ def save_als_model(
             "idx_to_item_id": imat.idx_to_item_id,
         }, f)
 
-    # Конвертируем numpy-типы перед json.dump
     def _to_python(v):
         if isinstance(v, np.integer):  return int(v)
         if isinstance(v, np.floating): return float(v)
@@ -416,8 +399,6 @@ def load_als_model(snapshot_date: pd.Timestamp) -> tuple:
 
 
 
-
-# EASE Model
 class EASEModel:
     def __init__(self, regularization: float = 500.0):
         self.regularization = regularization
@@ -427,7 +408,7 @@ class EASEModel:
         X = imat.matrix.toarray().astype(np.float64)
         G = X.T @ X
         diag_indices = np.arange(G.shape[0])
-        G[diag_indices, diag_indices] += self.regularization  # G + λI
+        G[diag_indices, diag_indices] += self.regularization
 
         P = np.linalg.inv(G)
         W = np.eye(P.shape[0]) - P / np.diag(P)
@@ -448,8 +429,7 @@ class EASEModel:
         if len(h_idx) == 0:
             return np.zeros(imat.n_items)
 
-        # Взвешенная сумма строк W
-        scores = c_vals @ self.W[h_idx, :]  # (M,)
+        scores = c_vals @ self.W[h_idx, :]
         return scores
 
     def score_user_from_history(
@@ -465,7 +445,7 @@ class EASEModel:
         if not h_idx:
             return np.zeros(imat.n_items)
 
-        return self.W[h_idx, :].sum(axis=0)  # (M,)
+        return self.W[h_idx, :].sum(axis=0)
 
 
 def train_ease(
@@ -500,7 +480,6 @@ def evaluate_loo_ease(
 
         scores = ease_model.score_user_from_matrix(u_idx, imat)
 
-        # Исключаем историю кроме hidden_isin
         for isin in set(imat.user_items(uid)) - {hidden_isin}:
             if isin in imat.item_id_to_idx:
                 scores[imat.item_id_to_idx[isin]] = -np.inf
@@ -618,13 +597,9 @@ def run_ease_training(
     logger.info("  ОБУЧЕНИЕ EASE МОДЕЛИ (без LOO-пар в матрице)")
     logger.info("─" * 60)
 
-    # LOO-пары строим от полной imat — те же что для ALS
     loo_pairs = build_loo_pairs(imat, tx_val)
-
-    # Строим чистый tx_window без LOO-пар
     tx_clean = build_tx_without_loo_pairs(tx_window, loo_pairs)
 
-    # Чистая матрица: те же параметры что у ALS, только без LOO-транзакций
     item_meta_clean = build_item_index(tx_clean, assets)
     imat_clean = build_interaction_matrix(
         tx_window        = tx_clean,
@@ -645,7 +620,6 @@ def run_ease_training(
         f"(удалено {imat.n_interactions - imat_clean.n_interactions:,} LOO-пар)"
     )
 
-    # Grid search и обучение на чистой матрице, оценка на тех же loo_pairs
     ease_result = grid_search_ease(imat_clean, loo_pairs)
     best_lam    = ease_result["best_ease_regularization"]
     ease_model  = train_ease(imat_clean, regularization=best_lam)
@@ -656,7 +630,6 @@ def run_ease_training(
 
 
 
-# Точка входа
 def run_training(
     imat: InteractionMatrix,
     tx_window: pd.DataFrame,

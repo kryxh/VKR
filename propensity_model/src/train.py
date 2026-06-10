@@ -224,7 +224,6 @@ def tune_timing(train_df: pd.DataFrame, valid_df: pd.DataFrame) -> dict:
     best = max(results, key=lambda x: x["val_auc"])
     logger.info(f"\n  Лучшие параметры timing: {best}")
 
-    # Сохраняем все результаты для анализа
     out_path = OUTPUT_DIR / "grid_search_timing.json"
     with open(out_path, "w") as f:
         json.dump({"results": results, "best": best}, f, indent=2)

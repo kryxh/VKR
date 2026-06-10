@@ -55,7 +55,6 @@ plt.rcParams.update({
 
 
 
-# Метрики
 def recall_at_k(y_true: np.ndarray, y_score: np.ndarray, k: float):
     threshold = np.percentile(y_score, (1 - k) * 100)
     predicted = (y_score >= threshold).astype(int)
@@ -125,7 +124,6 @@ def log_metrics(metrics: dict):
 
 
 
-# Оценка по сегментам
 def evaluate_by_segment(model, df, model_name, model_type="timing"):
     df = df.copy()
     if model_type == "timing":
@@ -166,7 +164,6 @@ def evaluate_by_segment(model, df, model_name, model_type="timing"):
 
 
 
-# Графики: ROC/PR кривые
 def plot_roc_pr(models_scores: dict[str, tuple[np.ndarray, np.ndarray]], save_path: Path | None = None):
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
     color_cycle = list(PALETTE.values())
@@ -213,7 +210,6 @@ def plot_roc_pr(models_scores: dict[str, tuple[np.ndarray, np.ndarray]], save_pa
 
 
 
-# Графики: Распределение скоров
 def plot_score_distributions(models_scores: dict[str, tuple[np.ndarray, np.ndarray]], save_path: Path | None = None):
     n = len(models_scores)
     fig, axes = plt.subplots(1, n, figsize=(6 * n, 4), sharey=False)
@@ -244,7 +240,6 @@ def plot_score_distributions(models_scores: dict[str, tuple[np.ndarray, np.ndarr
 
 
 
-# График: Калибровочная кривая (диаграмма надежности)
 def plot_calibration(models_scores: dict[str, tuple[np.ndarray, np.ndarray]], n_bins: int = 10, save_path: Path | None = None):
     fig, ax = plt.subplots(figsize=(7, 6))
     ax.plot([0, 1], [0, 1], "k--", lw=1.2, alpha=0.5, label="Perfect calibration")
@@ -271,7 +266,6 @@ def plot_calibration(models_scores: dict[str, tuple[np.ndarray, np.ndarray]], n_
 
 
 
-# График: Кумулятивный доход и лифт
 def plot_lift_curve(models_scores: dict[str, tuple[np.ndarray, np.ndarray]], save_path: Path | None = None):
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
 
@@ -289,7 +283,7 @@ def plot_lift_curve(models_scores: dict[str, tuple[np.ndarray, np.ndarray]], sav
             if chart_type == "gain":
                 ax.plot(x, cumulative_pos, color=color_cycle[i], lw=2, label=name)
             else:
-                lift = cumulative_pos / x   # lift vs random
+                lift = cumulative_pos / x
                 ax.plot(x, lift, color=color_cycle[i], lw=2, label=name)
 
         if chart_type == "gain":
@@ -319,7 +313,6 @@ def plot_lift_curve(models_scores: dict[str, tuple[np.ndarray, np.ndarray]], sav
 
 
 
-# График: Важность признаков
 def plot_feature_importance(model, top_n=15, save_path=None, model_type="timing"):
     try:
         fi = pd.DataFrame({
@@ -332,7 +325,6 @@ def plot_feature_importance(model, top_n=15, save_path=None, model_type="timing"
 
     top = fi.head(top_n).iloc[::-1]
 
-    # Выбираем нужные списки признаков в зависимости от модели
     cat_features = (
         TIMING_CAT_FEATURES if model_type == "timing"
         else REACTIVATION_CAT_FEATURES
@@ -340,27 +332,26 @@ def plot_feature_importance(model, top_n=15, save_path=None, model_type="timing"
 
     def _group_color(feature):
         if feature in cat_features:
-            return PALETTE["orange"]                      # профиль категориальный
+            return PALETTE["orange"]
         if any(x in feature for x in ["buy", "sell", "value", "ticket"]):
-            return PALETTE["logreg"]                      # RFM
+            return PALETTE["logreg"]
         if any(x in feature for x in ["trend", "month", "new_customer"]):
-            return PALETTE["green"]                       # динамика
+            return PALETTE["green"]
         if any(x in feature for x in ["since", "tenure"]):
-            return PALETTE["catboost"]                    # time-since
+            return PALETTE["catboost"]
         if any(x in feature for x in ["share", "unique"]):
-            return "#9333EA"                              # портфель
-        # Новые группы признаков
+            return "#9333EA"
         if any(x in feature for x in ["interval", "pause", "survived",
                                         "cadence", "gap"]):
-            return "#0891B2"                              # cadence (голубой)
+            return "#0891B2"
         if any(x in feature for x in ["market", "return", "volatility",
                                         "drawdown"]):
-            return "#059669"                              # рыночный контекст (зелёный)
+            return "#059669"
         if any(x in feature for x in ["seasonal", "same_month",
                                         "same_quarter"]):
-            return "#D97706"                              # сезонность (янтарный)
+            return "#D97706"
         if "_x_" in feature:
-            return "#DC2626"                              # взаимодействия (красный)
+            return "#DC2626"
         return PALETTE["baseline"]
 
     colors = [_group_color(f) for f in top["feature"]]
@@ -401,7 +392,6 @@ def plot_feature_importance(model, top_n=15, save_path=None, model_type="timing"
 
 
 
-# График: Таблица сравнения метрик
 def plot_metrics_table(metrics_list: list[dict], save_path: Path | None = None):
     cols_order = [
         "model", "roc_auc", "pr_auc", "brier",
@@ -474,7 +464,6 @@ def plot_metrics_table(metrics_list: list[dict], save_path: Path | None = None):
 
 
 
-# Основная функция оценки
 def run_evaluation(
     models: dict,
     test_df: pd.DataFrame,
@@ -488,7 +477,6 @@ def run_evaluation(
     logger.info("  ОЦЕНКА — TIMING МОДЕЛИ (тестовая выборка)")
     logger.info("═" * 56)
 
-    # ── 1. Timing модели (logreg + catboost_timing) ──────────────
     timing_models = {
         k: v for k, v in models.items()
         if k in ("logreg", "timing")
@@ -511,7 +499,6 @@ def run_evaluation(
         timing_metrics[display_name] = metrics
         timing_scores[display_name] = (y_test.values, y_score)
 
-    # Сегментный анализ timing
     logger.info("\n─── Оценка timing по сегментам ───")
     timing_seg_results = []
     for name, model in timing_models.items():
@@ -519,7 +506,6 @@ def run_evaluation(
         if not seg_df.empty:
             timing_seg_results.append(seg_df)
 
-    # ── 2. Reactivation модель ───────────────────────────────────
     logger.info("\n" + "═" * 56)
     logger.info("  ОЦЕНКА — REACTIVATION МОДЕЛИ (тестовая выборка)")
     logger.info("═" * 56)
@@ -550,7 +536,6 @@ def run_evaluation(
             react_scores[display_name]  = (y_react.values, y_score_react)
 
 
-        # Сегментный анализ reactivation — по глубине паузы
         logger.info("\n─── Оценка reactivation по глубине паузы ───")
         if "reactivation" in react_models and react_models["reactivation"] is not None:
             seg_react = evaluate_by_segment(
@@ -562,10 +547,8 @@ def run_evaluation(
             seg_react.to_csv(seg_path, index=False)
             logger.info(f"  Метрики по сегментам reactivation: {seg_path}")
 
-    # ── 3. Графики ───────────────────────────────────────────────
     logger.info("\n─── Создание графиков ───")
 
-    # Timing графики
     plot_roc_pr(timing_scores, save_path=EVAL_DIR / "roc_pr_timing.png")
     plot_score_distributions(timing_scores,
                              save_path=EVAL_DIR / "score_dist_timing.png")
@@ -574,7 +557,6 @@ def run_evaluation(
     plot_lift_curve(timing_scores,
                     save_path=EVAL_DIR / "lift_timing.png")
 
-    # Reactivation графики — только если есть данные
     if react_scores:
         plot_roc_pr(react_scores,
                     save_path=EVAL_DIR / "roc_pr_reactivation.png")
@@ -585,7 +567,6 @@ def run_evaluation(
         plot_lift_curve(react_scores,
                         save_path=EVAL_DIR / "lift_reactivation.png")
 
-    # Feature importance — с указанием model_type для правильных цветов
     for name, model in timing_models.items():
         if hasattr(model, "feature_names_"):
             fi_df = plot_feature_importance(
@@ -606,7 +587,6 @@ def run_evaluation(
             EVAL_DIR / "feature_importance_reactivation.csv", index=False
         )
 
-    # ── 4. Сводные таблицы метрик ────────────────────────────────
     all_metrics = {**timing_metrics, **react_metrics}
 
     plot_metrics_table(
@@ -620,13 +600,11 @@ def run_evaluation(
             save_path=EVAL_DIR / "metrics_table_reactivation.png",
         )
 
-    # ── 5. Сохранение метрик ─────────────────────────────────────
     json_path = EVAL_DIR / "all_metrics.json"
     with open(json_path, "w") as f:
         json.dump(list(all_metrics.values()), f, indent=2)
     logger.info(f"\n  Все метрики сохранены: {json_path}")
 
-    # Сегменты timing
     if timing_seg_results:
         seg_summary = pd.concat(timing_seg_results, ignore_index=True)
         seg_summary.to_csv(EVAL_DIR / "segment_metrics_timing.csv", index=False)

@@ -6,10 +6,9 @@ from pathlib import Path
 
 import pandas as pd
 
-# Импорт проектов
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
-from config import OUTPUT_DIR#, TRAIN_END, VALID_END
+from config import OUTPUT_DIR
 from data_loader import load_all
 from dataset_builder import (
     build_dataset,
@@ -25,7 +24,6 @@ from predict import (
 )
 
 
-# Настройка логирования
 def setup_logging(level: str = "INFO") -> None:
     logging.basicConfig(
         level=getattr(logging, level.upper(), logging.INFO),
@@ -61,7 +59,6 @@ def load_react_dataset_cache():
 
 
 
-# Запуск этапов
 def stage_load_data():
     logger.info("━" * 60)
     logger.info("  ЭТАП 1 — Загрузка данных")
@@ -78,7 +75,6 @@ def stage_build_dataset(data, skip_build):
     logger.info("━" * 60)
     t0 = time.time()
 
-    # Timing датасет
     if skip_build and DATASET_CACHE.exists():
         dataset = load_dataset_cache()
         logger.info(f"  Timing: загружено из кэша: {len(dataset):,} строк")
@@ -93,7 +89,6 @@ def stage_build_dataset(data, skip_build):
 
     _log_dataset_summary(dataset, name="Timing")
 
-    # Reactivation датасет
     if skip_build and REACT_DATASET_CACHE.exists():
         react_dataset = load_react_dataset_cache()
         logger.info(
@@ -118,8 +113,6 @@ def stage_split(dataset, react_dataset, data):
     logger.info("━" * 60)
     logger.info("  ЭТАП 3 — Train / Valid / Test Split (timing + reactivation)")
     logger.info("━" * 60)
-    #train_df, valid_df, test_df = time_split(dataset)
-    #train_react_df, valid_react_df, test_react_df = time_split(react_dataset)
 
     train_df, valid_df, test_df = time_split(dataset, transactions=data["transactions"])
     train_react_df, valid_react_df, test_react_df = time_split(
@@ -232,7 +225,6 @@ def _print_final_summary(metrics, hot):
     logger.info("  ПАЙПЛАЙН ПОЛНОСТЬЮ ВЫПОЛНЕН")
     logger.info("═" * 60)
 
-    # Timing метрики
     if "timing" in metrics:
         m = metrics["timing"]
         logger.info(f"\n  Timing модель (CatBoost) на тесте:")
@@ -241,7 +233,6 @@ def _print_final_summary(metrics, hot):
         logger.info(f"    Recall@top20%   : {m.get('recall@top20pct', '—')}")
         logger.info(f"    Lift@top20%     : {m.get('lift@top20pct', '—'):.2f}x")
 
-    # Reactivation метрики
     if "reactivation" in metrics:
         m = metrics["reactivation"]
         logger.info(f"\n  Reactivation модель на тесте:")
@@ -260,7 +251,6 @@ def _print_final_summary(metrics, hot):
             f"    Dormant  : {dormant_in_top:,} ({dormant_share:.1%})\n"
             f"    Средний скор : {hot['propensity_score'].mean():.4f}"
         )
-        # Ключевая бизнес-метрика — доля спящих в топе
         if dormant_share < 0.15:
             logger.warning(
                 f"  ⚠ Dormant доля в топе низкая ({dormant_share:.1%}) — "
@@ -272,7 +262,6 @@ def _print_final_summary(metrics, hot):
 
 
 
-# CLI
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Propensity Model pipeline",
@@ -384,7 +373,6 @@ def stage_tune(train_df, valid_df, train_react_df, valid_react_df):
     return best_timing, best_reactivation
 
 
-# Main
 def main():
     args = parse_args()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

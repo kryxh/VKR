@@ -12,7 +12,6 @@ from config import COLD_START_THRESHOLD_DAYS, ANOMALY_PERIODS
 logger = logging.getLogger(__name__)
 
 
-# Фильтрация
 def _buys(tx):
     return tx[tx["transactionType"] == "Buy"]
 
@@ -67,7 +66,7 @@ def compute_rfm_features(tx_history: pd.DataFrame, snapshot_date: pd.Timestamp):
     rfm = rfm.drop(columns=["last_buy_date"])
     rfm[["num_buys_30d", "num_buys_90d", "num_sells_30d"]] = (rfm[["num_buys_30d", "num_buys_90d", "num_sells_30d"]].fillna(0).astype(int))
     rfm[["sum_value_30d", "avg_ticket_30d"]] = (rfm[["sum_value_30d", "avg_ticket_30d"]].fillna(0.0))
-    rfm["log1p_avg_ticket_30d"] = np.log1p(rfm["avg_ticket_30d"]) # Логарифмируем avg_ticket_30d
+    rfm["log1p_avg_ticket_30d"] = np.log1p(rfm["avg_ticket_30d"])
 
     return rfm
 
@@ -255,7 +254,7 @@ def compute_cadence_features(
         (
             (pause_with_stats["current_pause_days"] - pause_with_stats["median_buy_interval"]) /
             (1.4826 * pause_with_stats["mad_buy_interval"].fillna(
-                pause_with_stats["mad_buy_interval"].median()  # fallback для клиентов с ровно 2 покупками
+                pause_with_stats["mad_buy_interval"].median()
             ) + 1e-6)
         ).clip(-3, 3),
         np.nan
@@ -350,7 +349,6 @@ def compute_cadence_features(
 
 
 # Группа 8 - Сезонность
-
 def compute_seasonal_features(tx_history: pd.DataFrame, snapshot_date: pd.Timestamp):
     buys = _real_buys(tx_history).copy()
     buys["month"] = buys["timestamp"].dt.month
@@ -571,7 +569,6 @@ def compute_interaction_features(features_df: pd.DataFrame, market_ctx: dict):
     return f
 
 
-# Основная функция: объединяет все группы фичей для одного снапшота
 def compute_all_features(
     tx_history, profile_df, assets_df, prices_df, snapshot_date,
     mode: str = "timing", market_ctx=None

@@ -9,7 +9,6 @@ from routers import clients, pipeline
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Проверяет подключение к БД при старте."""
     if not check_connection():
         raise RuntimeError(
             "Не удалось подключиться к PostgreSQL. "
@@ -25,8 +24,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Investment Bank Advisory Service",
     description=(
-        "ML-powered сервис для финансовых советников: "
-        "приоритизация клиентов (propensity) + рекомендации активов (EASE/ALS)."
+        "ML сервис для финансовых советников: "
+        "приоритизация клиентов + рекомендации активов"
     ),
     version="1.0.0",
     lifespan=lifespan,
@@ -49,7 +48,6 @@ app.include_router(pipeline.router, prefix="/api", tags=["Pipeline"])
 
 @app.get("/health", tags=["Health"])
 def health():
-    """Проверка работоспособности сервиса."""
     return {"status": "ok"}
 
 

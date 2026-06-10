@@ -11,7 +11,6 @@ from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-# Добавляем родительскую директорию в path для импорта из backend/
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from db.models import (
@@ -27,8 +26,7 @@ from db.models import (
 from db.session import SessionLocal, create_tables
 
 
-# Пути к данным (монтируются через Docker volumes)
-# Базовая директория бэкенда (/app внутри контейнера)
+# Пути к данным
 _APP_DIR = Path(__file__).resolve().parents[1]
 
 RAW_DATA_DIR = _APP_DIR / "data" / "raw"
@@ -52,7 +50,6 @@ def _get_snapshot_date() -> str:
         logger.info(f"[Loader] snapshot_date из ENV: {env_date}")
         return env_date.replace("-", "")
 
-    # Ищем файлы hot_customers_YYYYMMDD.csv и берём максимальную дату
     files = sorted(PROPENSITY_DIR.glob("hot_customers_*.csv"))
     if not files:
         raise FileNotFoundError(
@@ -111,8 +108,6 @@ def load_customers(db: Session) -> int:
     logger.info(f"[Loader] Загрузка customers из {path}")
 
     df = pd.read_csv(path, parse_dates=["lastQuestionnaireDate", "timestamp"])
-
-    # Оставляем только самую свежую запись на клиента
     df = df.sort_values("timestamp", ascending=False).drop_duplicates("customerID")
 
     rows = []
@@ -199,11 +194,9 @@ def load_transactions(db: Session) -> int:
 
     df = pd.read_csv(path, parse_dates=["timestamp"])
 
-    # Фильтрация
     df = df[df["transactionID"] >= 0]
     df = df[df["transactionType"].isin(["Buy", "Sell"])]
 
-    # Дедупликация по transactionID — в исходном CSV встречаются дубли.
     before = len(df)
     df = df.drop_duplicates(subset=["transactionID", "customerID", "transactionType"], keep="first")
     if len(df) < before:
@@ -211,8 +204,6 @@ def load_transactions(db: Session) -> int:
 
     logger.info(f"[Loader] transactions после фильтрации: {len(df):,}")
 
-    # Получаем множество customer_id уже загруженных в customers —
-    # FK constraint не даст вставить транзакцию с неизвестным клиентом.
     known_customers = {r[0] for r in db.execute(
         __import__('sqlalchemy').text("SELECT customer_id FROM customers")
     ).fetchall()}
@@ -252,7 +243,7 @@ def load_transactions(db: Session) -> int:
 
 
 
-# 4. Загрузка close_prices (опционально — большая таблица)
+# 4. Загрузка close_prices
 def load_close_prices(db: Session) -> int:
     path = RAW_DATA_DIR / "close_prices.csv"
     if not path.exists():
@@ -450,7 +441,7 @@ def load_recommendations(db: Session, date_str: str) -> int:
 
 
 
-# 7. Синтетические советники
+# 7. Советники
 _LAST_NAMES_M = [
     "Иванов", "Смирнов", "Кузнецов", "Попов", "Васильев",
     "Петров", "Соколов", "Михайлов", "Новиков", "Фёдоров",
@@ -573,17 +564,15 @@ def load_advisors(db: Session, date_str: str) -> None:
 
 
 
-# Точка входа: load_all()
+# Точка входа
 def load_all(skip_close_prices: bool = True) -> None:
     logger.info("=" * 60)
     logger.info("  ЗАГРУЗКА ДАННЫХ В БД")
     logger.info("=" * 60)
 
-    # Создаём таблицы если не существуют
     create_tables()
     logger.info("[Loader] Таблицы созданы/проверены")
 
-    # Определяем дату snapshot
     date_str = _get_snapshot_date()
     logger.info(f"[Loader] snapshot_date: {date_str}")
 
@@ -613,7 +602,7 @@ def load_all(skip_close_prices: bool = True) -> None:
 
 
 
-# CLI запуск
+# CLI
 if __name__ == "__main__":
     import argparse
 

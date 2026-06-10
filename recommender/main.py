@@ -58,7 +58,6 @@ logger = logging.getLogger(__name__)
 def parse_args():
     parser = argparse.ArgumentParser(description="Recommender Model — FAR-Trans")
 
-    # Дата среза — теперь опциональная, как в propensity
     parser.add_argument(
         "--snapshot-date", type=str, default=None,
         help="Дата среза YYYY-MM-DD. По умолчанию — последняя дата в транзакциях."

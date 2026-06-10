@@ -46,7 +46,6 @@ def _get_last_asset_category(db: Session, customer_id: str, snapshot_date: date)
 
 @router.get("/advisors")
 def get_advisors(db: Session = Depends(get_db)):
-    """Список советников для фильтра на фронтенде."""
     advisors = db.query(Advisor).order_by(Advisor.advisor_id).all()
     return {
         "items": [
@@ -60,7 +59,6 @@ def get_advisors(db: Session = Depends(get_db)):
 # GET /api/clients/stats
 @router.get("/clients/stats")
 def get_clients_stats(db: Session = Depends(get_db)):
-    """Возвращает агрегаты для настройки фильтров на фронтенде."""
     snapshot_date = _get_latest_snapshot(db)
     if snapshot_date is None:
         return {"max_days": 365, "total_hot": 0}
@@ -82,16 +80,16 @@ def get_clients_stats(db: Session = Depends(get_db)):
 # GET /api/clients
 @router.get("/clients", response_model=ClientListResponse)
 def get_clients(
-    segment:      Optional[str]   = Query(None),
-    score_min:    float            = Query(0.0, ge=0.0, le=1.0),
-    score_max:    float            = Query(1.0, ge=0.0, le=1.0),
-    days_min:     int              = Query(0,   ge=0),
-    days_max:     int              = Query(9999, ge=0),
-    advisor_name: Optional[str]   = Query(None),
-    search_id:    Optional[str]   = Query(None),
-    page:         int              = Query(1,   ge=1),
-    page_size:    int              = Query(50,  ge=1, le=200),
-    db:           Session          = Depends(get_db),
+    segment: Optional[str] = Query(None),
+    score_min: float = Query(0.0, ge=0.0, le=1.0),
+    score_max: float = Query(1.0, ge=0.0, le=1.0),
+    days_min: int = Query(0,   ge=0),
+    days_max: int = Query(9999, ge=0),
+    advisor_name: Optional[str] = Query(None),
+    search_id: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
 ):
     snapshot_date = _get_latest_snapshot(db)
     if snapshot_date is None:
@@ -183,9 +181,9 @@ def get_client_card(customer_id: str, db: Session = Depends(get_db)):
         segment=scoring.segment or "unknown",
     )
 
-    portfolio     = _compute_portfolio(db, customer_id, snapshot_date)
+    portfolio  = _compute_portfolio(db, customer_id, snapshot_date)
     recommendations = _build_recommendations(db, customer_id, snapshot_date)
-    recent_tx     = _get_recent_transactions(db, customer_id, snapshot_date)
+    recent_tx = _get_recent_transactions(db, customer_id, snapshot_date)
 
     return ClientCardResponse(
         profile=profile,
@@ -214,17 +212,17 @@ def _compute_portfolio(db: Session, customer_id: str, snapshot_date: date) -> Po
         )
 
     n_unique = len({tx.isin for tx in buy_txs if tx.isin})
-    n_total  = len(buy_txs)
-    dates    = [tx.timestamp.date() for tx in buy_txs if tx.timestamp]
+    n_total = len(buy_txs)
+    dates = [tx.timestamp.date() for tx in buy_txs if tx.timestamp]
     first_buy = min(dates) if dates else None
-    last_buy  = max(dates) if dates else None
+    last_buy = max(dates) if dates else None
 
     from collections import Counter
     isins = [tx.isin for tx in buy_txs if tx.isin]
     assets = db.query(Asset).filter(Asset.isin.in_(set(isins))).all()
     asset_map = {a.isin: a for a in assets}
 
-    cat_counts    = Counter()
+    cat_counts = Counter()
     sector_counts = Counter()
     for tx in buy_txs:
         a = asset_map.get(tx.isin)
@@ -235,7 +233,7 @@ def _compute_portfolio(db: Session, customer_id: str, snapshot_date: date) -> Po
                 sector_counts[a.sector] += 1
 
     top_category = cat_counts.most_common(1)[0][0] if cat_counts else None
-    top_sector   = sector_counts.most_common(1)[0][0] if sector_counts else None
+    top_sector = sector_counts.most_common(1)[0][0] if sector_counts else None
 
     return Portfolio(
         n_unique_assets=n_unique,
@@ -254,11 +252,11 @@ def _build_recommendations(db: Session, customer_id: str, snapshot_date: date) -
 
     result = []
     for rank in (1, 2, 3):
-        isin          = getattr(rec, f"rank_{rank}_isin", None)
-        category      = getattr(rec, f"rank_{rank}_category", None)
-        score         = getattr(rec, f"rank_{rank}_score", None)
+        isin = getattr(rec, f"rank_{rank}_isin", None)
+        category = getattr(rec, f"rank_{rank}_category", None)
+        score = getattr(rec, f"rank_{rank}_score", None)
         justification = getattr(rec, f"rank_{rank}_justification", None)
-        outside_hist  = getattr(rec, f"rank_{rank}_outside_hist", None)
+        outside_hist = getattr(rec, f"rank_{rank}_outside_hist", None)
         if not isin:
             continue
         asset = db.query(Asset).filter_by(isin=isin).first()

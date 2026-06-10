@@ -5,8 +5,6 @@ from sqlalchemy.orm import sessionmaker, Session
 
 from db.models import Base
 
-
-# Engine
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
     "postgresql://advisory_user:secure_password@localhost:5432/advisory_db",

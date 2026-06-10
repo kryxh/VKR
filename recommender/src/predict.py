@@ -69,7 +69,6 @@ def build_client_profile(
 
 
 
-# Шаг 4 — ALS scoring
 def _compute_user_scores_from_history(
     h_u: list[str],
     u_idx: Optional[int],
@@ -77,29 +76,25 @@ def _compute_user_scores_from_history(
     imat: InteractionMatrix,
     fusion_alpha: float,
 ) -> np.ndarray:
-    V = model.item_factors  # (n_items, k)
+    V = model.item_factors
     n_items = imat.n_items
 
-    # Item-based score: mean_{j in H_u} (v_j · v_i)
     h_idx = [imat.item_id_to_idx[isin] for isin in h_u
              if isin in imat.item_id_to_idx]
     if h_idx:
-        mean_vec = V[h_idx].mean(axis=0)   # (k,)
-        s_item   = V @ mean_vec             # (n_items,)
+        mean_vec = V[h_idx].mean(axis=0)
+        s_item   = V @ mean_vec
     else:
         s_item = np.zeros(n_items)
 
-    # User-based score: u_u · v_i
     if model is not None and u_idx is not None and u_idx < model.user_factors.shape[0]:
         U = model.user_factors
         u_vec  = U[u_idx]
         s_user = V @ u_vec
     else:
-        # Клиент новый для матрицы: s_user = 0, полагаемся только на item-CF
         s_user = np.zeros(n_items)
         fusion_alpha = 1.0
 
-    # Percentile rank нормализация (Koren et al., 2009)
     s_item_norm  = _percentile_rank_normalize(s_item)
     s_user_norm  = _percentile_rank_normalize(s_user)
 
@@ -127,7 +122,6 @@ def _exclude_recently_bought(
 
 
 
-# Шаг 5 — Diversity корректировка
 def _apply_portfolio_boost(
     scores: np.ndarray,
     h_u_isins: list[str],
@@ -144,16 +138,14 @@ def _apply_portfolio_boost(
     if n_cats < PORTFOLIO_BOOST_MIN_CATS:
         return scores
 
-    # Находим категорию с наименьшей долей
     total    = sum(cat_counts.values())
     cat_share = {c: v / total for c, v in cat_counts.items()}
     min_cat  = min(cat_share, key=cat_share.get)
 
-    # Бустим ISINs из недостающей категории
     boosted = scores.copy()
 
     for i, isin in imat.idx_to_item_id.items():
-        if i >= len(boosted):      # ← ISIN не входит в матрицу EASE
+        if i >= len(boosted):
             continue
         if isin in imat.item_meta.index:
             if imat.item_meta.loc[isin, "assetCategory"] == min_cat:
@@ -168,15 +160,12 @@ def _select_diverse_top_k(
     imat: InteractionMatrix,
     k: int = TOP_K,
 ) -> list[int]:
-    # Полный ранжированный список доступных кандидатов
     ranked_idx   = np.argsort(scores)[::-1]
     valid_ranked = [i for i in ranked_idx if scores[i] > -np.inf]
 
     if len(valid_ranked) <= k:
         return valid_ranked
 
-    # Определяем preferred_category (у большинства — одна)
-    # Берём из топ-1 кандидата
     top1_isin = imat.idx_to_item_id[valid_ranked[0]]
     pref_cat  = (
         imat.item_meta.loc[top1_isin, "assetCategory"]
@@ -184,7 +173,6 @@ def _select_diverse_top_k(
         else None
     )
 
-    # Проверяем доступность sector-данных
     meta = imat.item_meta
     has_sector = (
         pref_cat is not None and
@@ -193,7 +181,6 @@ def _select_diverse_top_k(
     )
 
     if has_sector:
-        # Стратегия 1: по секторам — top-1 из каждого из k различных секторов
         chosen   = []
         used_sec = set()
 
@@ -210,7 +197,6 @@ def _select_diverse_top_k(
                 if not pd.isna(sector):
                     used_sec.add(sector)
 
-        # Дополняем если не хватает (rare case)
         if len(chosen) < k:
             for idx in valid_ranked:
                 if idx not in chosen:
@@ -220,16 +206,14 @@ def _select_diverse_top_k(
         return chosen[:k]
 
     else:
-        # Стратегия 2: weighted random по percentile rank из топ-N кандидатов
         pool_size = min(len(valid_ranked), max(k * 5, 20))
         pool      = valid_ranked[:pool_size]
         weights   = np.array([scores[i] for i in pool])
-        weights   = _percentile_rank_normalize(weights) + 1e-9  # избегаем 0
+        weights   = _percentile_rank_normalize(weights) + 1e-9
         weights  /= weights.sum()
 
         chosen_set = set()
         chosen     = []
-        # Не полагаемся на replace=False при маленьком pool
         attempts = 0
         while len(chosen) < k and attempts < pool_size * 3:
             idx = np.random.choice(pool, p=weights)
@@ -248,7 +232,6 @@ def _select_diverse_top_k(
 
 
 
-# Fallback для холодных клиентов
 def _popularity_fallback(
     uid: str,
     tx_all: pd.DataFrame,
@@ -257,7 +240,6 @@ def _popularity_fallback(
     profile: pd.Series,
     k: int = TOP_K,
 ) -> list[tuple[str, str]]:
-    # Preferred category
     user_hist = tx_all[
         (tx_all["customerID"] == uid) &
         (tx_all["timestamp"] < snapshot_date)
@@ -274,14 +256,11 @@ def _popularity_fallback(
         risk = profile.get("riskLevel", "Not_Available") if profile is not None else "Not_Available"
         pref_cat = RISK_FALLBACK_CATEGORY.get(risk, "Stock")
 
-    # Пул ISINs нужной категории из ALS item space
     meta_cat = imat.item_meta.reset_index()
     cat_pool = meta_cat[meta_cat["assetCategory"] == pref_cat].copy()
     if cat_pool.empty:
-        # Фолбэк на весь item space
         cat_pool = meta_cat.copy()
 
-    # Исключаем недавно купленные
     cutoff     = snapshot_date - pd.Timedelta(days=EXCLUDE_RECENT_DAYS)
     recent_set = set(
         tx_all[
@@ -294,21 +273,18 @@ def _popularity_fallback(
     if cat_pool.empty:
         return []
 
-    # log-weight для popular diversity
     cat_pool["log_weight"] = np.log1p(cat_pool["n_buyers"])
 
     has_sector = cat_pool["sector"].notna().any()
     chosen_isins = []
 
     if has_sector:
-        # Стратегия 1: top-1 из каждого из k секторов
         top_sectors = (
             cat_pool.dropna(subset=["sector"])
             .groupby("sector")["n_buyers"].sum()
             .nlargest(k).index.tolist()
         )
         used_sec = set()
-        # Сначала из топ-секторов
         for sector in top_sectors:
             sec_pool = cat_pool[cat_pool["sector"] == sector]
             if sec_pool.empty or sector in used_sec:
@@ -319,7 +295,6 @@ def _popularity_fallback(
             if len(chosen_isins) >= k:
                 break
 
-        # Дополняем без сектора если нужно
         if len(chosen_isins) < k:
             no_sec_pool = cat_pool[cat_pool["sector"].isna()]
             for _, row in no_sec_pool.nlargest(k, "n_buyers").iterrows():
@@ -328,7 +303,6 @@ def _popularity_fallback(
                 if len(chosen_isins) >= k:
                     break
     else:
-        # Стратегия 2: weighted random по log_weight
         weights = cat_pool["log_weight"].values
         weights /= weights.sum()
         pool_isins = cat_pool["ISIN"].values
@@ -347,7 +321,6 @@ def _popularity_fallback(
 
 
 
-# Шаг 6 — Формирование одной рекомендации
 def _format_recommendation(
     uid: str,
     top_k_idx: list[int],
@@ -415,7 +388,6 @@ def _format_fallback_recommendation(
         rec[f"rank_{rank}_justification"] = just
         rec[f"rank_{rank}_outside_hist"]  = outside
 
-    # Заполняем оставшиеся ранги если fallback вернул < TOP_K
     for rank in range(len(fallback_list) + 1, TOP_K + 1):
         rec[f"rank_{rank}_isin"]          = None
         rec[f"rank_{rank}_category"]      = None
@@ -438,7 +410,6 @@ def compute_ease_score_for_user(
 
 
 
-# Точка входа: inference для всех hot customers
 def run_prediction(
     hot_customers: pd.DataFrame,
     model: AlternatingLeastSquares,
@@ -469,7 +440,6 @@ def run_prediction(
         seg   = hot_row.get("segment", "unknown")
         score = hot_row.get("propensity_score", float("nan"))
 
-        # Профиль клиента (для risk_profile_verified и fallback mapping)
         user_profile = profile_snap.loc[
             profile_snap["customerID"] == uid
         ].iloc[0] if uid in profile_snap["customerID"].values else None
@@ -487,16 +457,13 @@ def run_prediction(
             "risk_profile_verified": risk_verified,
         }
 
-        # Шаг 3: ступенчатое расширение окна
         h_u, window_label = build_client_profile(
             tx_all, uid, snapshot_date, als_item_set
         )
         base["window_used"]      = window_label
         base["n_history_isins"]  = len(h_u)
 
-        # Определяем путь
         if window_label == "none" or not h_u:
-            # Fallback path
             fallback_list = _popularity_fallback(
                 uid, tx_all, snapshot_date, imat, user_profile
             )
@@ -505,12 +472,8 @@ def run_prediction(
             n_fallback += 1
 
         else:
-            # ALS path
-            u_idx = imat.user_id_to_idx.get(uid)  # None если клиент новый в матрице
+            u_idx = imat.user_id_to_idx.get(uid)
 
-            # Шаг 4: вычисление скоров
-            # Если EASE доступна — используем её (лучшее item-item качество).
-            # Иначе — ALS с percentile rank fusion.
             if ease_model is not None and ease_model.W is not None:
                 scores = compute_ease_score_for_user(h_u, u_idx, ease_model, imat)
                 rec_type_label = "ease" 
@@ -520,19 +483,15 @@ def run_prediction(
                     rec_type_label = "als" 
                 )
 
-            # Исключаем недавно купленные
             scores = _exclude_recently_bought(
                 scores, uid, tx_all, snapshot_date, imat
             )
 
-            # Шаг 5: portfolio boost (только n_cat >= 2)
             scores = _apply_portfolio_boost(scores, h_u, imat)
 
-            # Diversity: intra-category top-K
             top_k_idx = _select_diverse_top_k(scores, imat, k=TOP_K)
 
             if not top_k_idx:
-                # Все кандидаты заблокированы → fallback
                 fallback_list = _popularity_fallback(
                     uid, tx_all, snapshot_date, imat, user_profile
                 )
@@ -555,7 +514,6 @@ def run_prediction(
 
     df_out = pd.DataFrame(records)
 
-    # Убеждаемся что все колонки присутствуют
     for col in OUTPUT_COLS:
         if col not in df_out.columns:
             df_out[col] = None

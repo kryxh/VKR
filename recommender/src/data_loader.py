@@ -32,32 +32,27 @@ _saved_config = _sys.modules.pop("config", None)
 
 try:
     _spec = importlib.util.spec_from_file_location(
-        "propensity_data_loader",   # уникальное имя модуля — не конфликтует
+        "propensity_data_loader",
         _PROPENSITY_LOADER_PATH,
     )
     _pmod = importlib.util.module_from_spec(_spec)
     _spec.loader.exec_module(_pmod)
 finally:
-    # Возвращаем recommender config обратно
     if _saved_config is not None:
         _sys.modules["config"] = _saved_config
     elif "config" in _sys.modules:
         del _sys.modules["config"]
-    # Убираем propensity/src из path
     if _path_added and _prop_src_str in sys.path:
         sys.path.remove(_prop_src_str)
-_load_tx                = _pmod.load_transactions
-_load_cust              = _pmod.load_customers
-_load_assets            = _pmod.load_assets
+_load_tx = _pmod.load_transactions
+_load_cust = _pmod.load_customers
+_load_assets = _pmod.load_assets
 get_customer_profile_at = _pmod.get_customer_profile_at
 
 
 
 def load_transactions() -> pd.DataFrame:
-    """Загружаем транзакции через propensity data_loader (очистка уже включена).
-    Дополнительно фильтруем: только Buy, только реальные (transactionID >= 0).
-    """
-    tx     = _load_tx(DATA_FILES["transactions"])
+    tx = _load_tx(DATA_FILES["transactions"])
     before = len(tx)
 
     tx = tx[
@@ -88,7 +83,7 @@ def get_buy_history(
     window_days: int,
 ) -> pd.DataFrame:
     cutoff = snapshot_date - pd.Timedelta(days=window_days)
-    mask   = (tx["timestamp"] >= cutoff) & (tx["timestamp"] < snapshot_date)
+    mask = (tx["timestamp"] >= cutoff) & (tx["timestamp"] < snapshot_date)
     return tx[mask].copy()
 
 
@@ -117,8 +112,8 @@ def build_item_index(
     if "sector" not in item_meta.columns:
         item_meta["sector"] = None
 
-    n_all     = tx_window["ISIN"].nunique()
-    n_kept    = len(item_meta)
+    n_all = tx_window["ISIN"].nunique()
+    n_kept = len(item_meta)
     n_dropped = n_all - n_kept
     logger.info(
         f"  Item index: {n_kept} ISINs "

@@ -25,7 +25,6 @@ class Base(DeclarativeBase):
 
 # Исходные данные FAR-Trans
 class Customer(Base):
-
     __tablename__ = "customers"
 
     customer_id = Column(String, primary_key=True)
@@ -44,7 +43,6 @@ class Customer(Base):
 
 
 class Transaction(Base):
-
     __tablename__ = "transactions"
 
     transaction_id = Column(BigInteger, nullable=False)
@@ -80,7 +78,6 @@ class Asset(Base):
 
 
 class ClosePrice(Base):
-
     __tablename__ = "close_prices"
 
     isin = Column(String, ForeignKey("assets.isin"), primary_key=True)
@@ -90,9 +87,7 @@ class ClosePrice(Base):
 
 
 # Результаты ML-пайплайна
-
 class ScoringResult(Base):
-
     __tablename__ = "scoring_results"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -155,9 +150,8 @@ class Recommendation(Base):
 
 
 
-# Синтетические советники
+# Советники
 class Advisor(Base):
-
     __tablename__ = "advisors"
 
     advisor_id = Column(Integer, primary_key=True, autoincrement=True)
@@ -169,7 +163,6 @@ class Advisor(Base):
 
 
 class AdvisorClient(Base):
-
     __tablename__ = "advisor_clients"
 
     advisor_id = Column(Integer, ForeignKey("advisors.advisor_id"), primary_key=True)
