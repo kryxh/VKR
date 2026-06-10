@@ -23,9 +23,9 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+*.parquet
 
 catboost_info/
-
 
 postgres_data/
 
